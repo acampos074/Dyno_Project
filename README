@@ -1,0 +1,17 @@
+// to compile all codes
+make
+
+// (DEPRECATED)
+// to compile itimer.c
+// make itimer 
+
+// to compile seqgen3.c
+
+// 1. need to connect CAN transciever and MCC
+// 2. run ./itimer (DEPRECATED)
+// 2. run ./seqgen3
+// 3. run ./dyno_gui
+
+// to monitor syslog output
+tail -f /var/log/syslog
+

@@ -1,0 +1,15 @@
+# Build outputs
+*.o
+*.a
+*.so
+seqgen3
+foc_gui
+
+# Data / logs
+*.csv
+*.log
+*.txt
+*.ods
+
+# OS
+.DS_Store

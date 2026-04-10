@@ -1,0 +1,23 @@
+package FOC;
+
+struct motor_t {
+	double position;
+	double position_cmd;
+	double velocity;
+	double velocity_cmd;
+	double torque;
+	double torque_cmd;
+	double iq;
+	double iq_cmd;
+	double id;
+	double vq;
+	double vq_cmd;
+	double vd;
+	double kp;
+	double kd;
+	int8_t led;
+	int8_t cmd_id;
+	int8_t flag;
+	int8_t control_flag;
+	
+}
