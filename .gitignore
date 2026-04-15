@@ -10,6 +10,8 @@ dyno_gui
 *.csv
 *.log
 *.txt
+*.ods
+.~lock.*
 
 # ImGui layout cache
 imgui.ini
