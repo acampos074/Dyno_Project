@@ -329,7 +329,8 @@ void FOC_ControlPanel(bool &paused)
 
     // ---- Manual data logging toggle ----
     static bool log_active = false;
-    if (log_active)
+    bool log_was_active = log_active;  // capture before button can toggle it
+    if (log_was_active)
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.18f, 0.18f, 1.0f));
     if (ImGui::Button(log_active ? "Stop Logging" : "Start Logging")) {
         log_active = !log_active;
@@ -337,7 +338,7 @@ void FOC_ControlPanel(bool &paused)
         lcm2.publish("MOTOR", &motor_data);
         motor_data.cmd_id = CMD_NONE;
     }
-    if (log_active)
+    if (log_was_active)
         ImGui::PopStyleColor();
     ImGui::SameLine();
     ImGui::Text(log_active ? "Logging ON" : "Logging OFF");
