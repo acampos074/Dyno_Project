@@ -1,10 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <pthread.h>
 
 #include "lcm_interface.h"
 #include "logger.h"
+
+/* Directory where all run-specific CSV files are created.
+ * Set by lcm_interface_set_data_dir() before the listener thread starts. */
+static char g_data_dir[512] = "";
 
 /* ---- Definitions of shared state declared extern in lcm_interface.h ---- */
 lcm_t          *lcm        = NULL;
@@ -16,6 +21,24 @@ pthread_mutex_t dyno_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Forward declaration — handler is file-local */
 static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
                         const FOC_motor_t *msg, void *user);
+
+/* ---- lcm_interface_set_data_dir ---- */
+void lcm_interface_set_data_dir(const char *dir)
+{
+    if (dir && *dir)
+        strncpy(g_data_dir, dir, sizeof(g_data_dir) - 1);
+    else
+        g_data_dir[0] = '\0';
+}
+
+/* Build a full path under g_data_dir.  buf must be at least PATH_MAX bytes. */
+static void make_path(char *buf, size_t buflen, const char *filename)
+{
+    if (g_data_dir[0])
+        snprintf(buf, buflen, "%s/%s", g_data_dir, filename);
+    else
+        snprintf(buf, buflen, "%s", filename);
+}
 
 /* ---- dyno_init ---- */
 void dyno_init(void)
@@ -102,21 +125,23 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
         pthread_mutex_unlock(&dyno_mutex);
 
         if (!currently_active) {
-            /* Start logging: open a uniquely named file */
+            /* Start logging: open a uniquely named file inside the run dir */
             time_t now = time(NULL);
             struct tm *tm_info = localtime(&now);
-            char fname[64];
-            strftime(fname, sizeof(fname), "log_%Y%m%d_%H%M%S.csv", tm_info);
-            new_manual_log = fopen(fname, "w");
+            char basename[64];
+            strftime(basename, sizeof(basename), "log_%Y%m%d_%H%M%S.csv", tm_info);
+            char path[576];
+            make_path(path, sizeof(path), basename);
+            new_manual_log = fopen(path, "w");
             if (new_manual_log) {
                 fprintf(new_manual_log,
                         "Time (s),Voltage CMD(V),Voltage MSR(V),Current (A),"
                         "Torque (Nm),Speed (rad/s),Pos (rad),"
                         "Elec Power (W),Mech Power (W),Efficiency\n");
                 log_set_manual_file(new_manual_log);
-                printf("Manual logging started: %s\n", fname);
+                printf("Manual logging started: %s\n", path);
             } else {
-                printf("my_handler: could not open %s\n", fname);
+                printf("my_handler: could not open %s\n", path);
             }
         } else {
             stop_manual_log = 1;
@@ -124,9 +149,11 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
     }
 
     if ((MotorCmd)msg->cmd_id == CMD_DYNO_TEST) {
-        new_dyno_test = fopen("dyno_test.csv", "w");
+        char dyno_path[576];
+        make_path(dyno_path, sizeof(dyno_path), "dyno_test.csv");
+        new_dyno_test = fopen(dyno_path, "w");
         if (!new_dyno_test) {
-            printf("my_handler: could not open dyno_test.csv\n");
+            printf("my_handler: could not open %s\n", dyno_path);
             return;
         }
         fprintf(new_dyno_test,

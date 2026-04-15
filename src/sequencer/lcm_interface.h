@@ -27,6 +27,12 @@ extern pthread_mutex_t dyno_mutex;  /* protects dyno and motor_data          */
 void dyno_init(void);
 
 /*
+ * Set the directory where dyno_test.csv and manual log files are created.
+ * Call before starting the listener thread.
+ */
+void lcm_interface_set_data_dir(const char *dir);
+
+/*
  * Create both LCM instances and subscribe my_handler to LCM_CHAN_MOTOR.
  * Returns 0 on success, -1 on failure.
  */

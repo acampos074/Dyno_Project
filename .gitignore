@@ -7,6 +7,7 @@ seqgen
 dyno_gui
 
 # Data / logs
+data/
 *.csv
 *.log
 *.txt

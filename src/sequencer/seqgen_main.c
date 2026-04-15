@@ -2,10 +2,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <sched.h>
 #include <time.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include <sys/sysinfo.h>
 
 #include "sequencer.h"
@@ -21,6 +24,28 @@ int main(void)
     struct timespec current_time_val, current_time_res;
     double current_realtime, current_realtime_res;
 
+    /* ---- Create timestamped run directory ---- */
+    char run_dir[256];
+    {
+        time_t now = time(NULL);
+        struct tm *tm_info = localtime(&now);
+        char ts[32];
+        strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", tm_info);
+
+        /* Ensure top-level data/ directory exists */
+        if (mkdir("data", 0755) < 0 && errno != EEXIST) {
+            perror("mkdir data");
+            return 1;
+        }
+
+        snprintf(run_dir, sizeof(run_dir), "data/run_%s", ts);
+        if (mkdir(run_dir, 0755) < 0) {
+            perror("mkdir run_dir");
+            return 1;
+        }
+        printf("Run directory: %s\n", run_dir);
+    }
+
     /* ---- Init shared dyno state ---- */
     dyno_init();
     printf("h = %f\n",            dyno.h);
@@ -30,13 +55,17 @@ int main(void)
     printf("T = %f\n",            dyno.T);
     printf("N = %d\n",            dyno.N);
 
-    /* ---- Open CSV log files ---- */
-    FILE *fp = fopen("file.csv", "w");
-    if (!fp) { printf("Cannot open file.csv\n"); return 1; }
+    /* ---- Open CSV log files inside run directory ---- */
+    char path_buf[320];
+
+    snprintf(path_buf, sizeof(path_buf), "%s/file.csv", run_dir);
+    FILE *fp = fopen(path_buf, "w");
+    if (!fp) { printf("Cannot open %s\n", path_buf); return 1; }
     fprintf(fp, "Column1,Column2\n");
 
-    FILE *foc_open_loop = fopen("foc_open_loop.csv", "w");
-    if (!foc_open_loop) { printf("Cannot open foc_open_loop.csv\n"); return 1; }
+    snprintf(path_buf, sizeof(path_buf), "%s/foc_open_loop.csv", run_dir);
+    FILE *foc_open_loop = fopen(path_buf, "w");
+    if (!foc_open_loop) { printf("Cannot open %s\n", path_buf); return 1; }
     fprintf(foc_open_loop,
             "Time (s),Voltage CMD(V),Voltage MSR(V),Current (A),"
             "Torque (Nm),Speed (rad/s),Pos (rad),"
@@ -44,6 +73,7 @@ int main(void)
 
     /* ---- Module init ---- */
     if (mcc_init() < 0) return 1;
+    lcm_interface_set_data_dir(run_dir);
     if (lcm_interface_init() < 0) return 1;
     if (can_open() < 0) return 1;
 
