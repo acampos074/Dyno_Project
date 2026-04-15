@@ -50,7 +50,8 @@ typedef enum {
     CMD_DYNO_TEST    = 6,
     CMD_TOGGLE_LED   = 7,
     CMD_CURRENT      = 8,
-    CMD_TORQUE       = 9
+    CMD_TORQUE       = 9,
+    CMD_LOG_TOGGLE   = 10   /* start / stop manual CSV logging */
 } MotorCmd;
 
 // ========== DYNO STRUCTURE ========
@@ -76,6 +77,7 @@ typedef struct {
     float elec_power;
     float mech_power;
     float efficiency;
+    int log_active;
     int total_test_counter;
     double Fs;
     double h;

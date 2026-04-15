@@ -19,9 +19,10 @@ static unsigned int log_dropped = 0;
 
 volatile int log_shutdown = 0;
 
-/* File handles — set by log_init / log_set_dyno_file */
-static FILE *g_foc_fp  = NULL;
-static FILE *g_dyno_fp = NULL;
+/* File handles — set by log_init / log_set_dyno_file / log_set_manual_file */
+static FILE *g_foc_fp    = NULL;
+static FILE *g_dyno_fp   = NULL;
+static FILE *g_manual_fp = NULL;
 
 void log_init(FILE *foc_fp, FILE *dyno_fp)
 {
@@ -38,6 +39,20 @@ void log_set_dyno_file(FILE *dyno_fp)
     /* Called from my_handler (non-RT).  logger_thread reads g_dyno_fp only
      * after sem_wait, which provides the necessary acquire barrier. */
     g_dyno_fp = dyno_fp;
+}
+
+void log_set_manual_file(FILE *manual_fp)
+{
+    g_manual_fp = manual_fp;
+}
+
+void log_close_manual_file(void)
+{
+    if (g_manual_fp) {
+        fflush(g_manual_fp);
+        fclose(g_manual_fp);
+        g_manual_fp = NULL;
+    }
 }
 
 int log_push(const log_entry_t *e)
@@ -73,6 +88,11 @@ void *logger_thread(void *arg)
                         e->elec_power, e->mech_power, e->efficiency);
             else if (e->log_type == LOG_TYPE_DYNO && g_dyno_fp)
                 fprintf(g_dyno_fp, fmt,
+                        e->time_s, e->vq_cmd, e->vq_msr, e->iq,
+                        e->torque_dyno, e->velocity, e->position,
+                        e->elec_power, e->mech_power, e->efficiency);
+            else if (e->log_type == LOG_TYPE_MANUAL && g_manual_fp)
+                fprintf(g_manual_fp, fmt,
                         e->time_s, e->vq_cmd, e->vq_msr, e->iq,
                         e->torque_dyno, e->velocity, e->position,
                         e->elec_power, e->mech_power, e->efficiency);

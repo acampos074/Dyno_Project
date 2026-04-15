@@ -152,6 +152,7 @@ int main(void)
     }
 
     /* ---- Flush logger and clean up ---- */
+    log_close_manual_file();   /* ensure manual log is saved if still open */
     log_shutdown_wait(th_logger);
 
     fclose(fp);

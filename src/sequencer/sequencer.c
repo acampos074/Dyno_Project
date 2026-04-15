@@ -321,6 +321,31 @@ void *Service_1(void *threadp)
             default:
                 break;
         }
+
+        /* Manual logging — runs every tick when active, regardless of control mode.
+         * Reads MCC torque and computes derived quantities independently of the
+         * per-mode reads above so all control modes are covered. */
+        if (cmd.log_active) {
+            float torque_dyno = mcc_read_torque();
+            float elec_power  = motor_data.iq * motor_data.vq;
+            float mech_power  = torque_dyno * motor_data.velocity;
+            float efficiency  = (elec_power != 0.0f) ? mech_power / elec_power : 0.0f;
+            clock_gettime(MY_CLOCK_TYPE, &current_time_val);
+            current_realtime = realtime(&current_time_val);
+            log_push(&(log_entry_t){
+                .log_type    = LOG_TYPE_MANUAL,
+                .time_s      = current_realtime - start_realtime,
+                .vq_cmd      = cmd.vq_cmd,
+                .vq_msr      = motor_data.vq,
+                .iq          = motor_data.iq,
+                .torque_dyno = torque_dyno,
+                .velocity    = motor_data.velocity,
+                .position    = motor_data.position,
+                .elec_power  = elec_power,
+                .mech_power  = mech_power,
+                .efficiency  = efficiency
+            });
+        }
     }
 
     pthread_exit((void *)0);

@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <pthread.h>
 
 #include "lcm_interface.h"
-#include "logger.h"   /* log_set_dyno_file */
+#include "logger.h"
 
 /* ---- Definitions of shared state declared extern in lcm_interface.h ---- */
 lcm_t          *lcm        = NULL;
@@ -22,6 +23,7 @@ void dyno_init(void)
     dyno = (dyno_t){
         .state             = 0,
         .led_flag          = 0,
+        .log_active        = 0,
         .pos_cmd           = 0.0,
         .vel_cmd           = 0.0,
         .vq_cmd            = 0.0,
@@ -88,8 +90,39 @@ void *listener(void *unused)
 static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
                         const FOC_motor_t *msg, void *user)
 {
-    /* Open dyno_test file outside the lock — file I/O must not hold dyno_mutex */
-    FILE *new_dyno_test = NULL;
+    /* Pre-lock file I/O — determine files to open/close before acquiring mutex */
+    FILE *new_dyno_test  = NULL;
+    FILE *new_manual_log = NULL;
+    int   stop_manual_log = 0;
+
+    if ((MotorCmd)msg->cmd_id == CMD_LOG_TOGGLE) {
+        /* Read current log_active state to decide what to do */
+        pthread_mutex_lock(&dyno_mutex);
+        int currently_active = dyno.log_active;
+        pthread_mutex_unlock(&dyno_mutex);
+
+        if (!currently_active) {
+            /* Start logging: open a uniquely named file */
+            time_t now = time(NULL);
+            struct tm *tm_info = localtime(&now);
+            char fname[64];
+            strftime(fname, sizeof(fname), "log_%Y%m%d_%H%M%S.csv", tm_info);
+            new_manual_log = fopen(fname, "w");
+            if (new_manual_log) {
+                fprintf(new_manual_log,
+                        "Time (s),Voltage CMD(V),Voltage MSR(V),Current (A),"
+                        "Torque (Nm),Speed (rad/s),Pos (rad),"
+                        "Elec Power (W),Mech Power (W),Efficiency\n");
+                log_set_manual_file(new_manual_log);
+                printf("Manual logging started: %s\n", fname);
+            } else {
+                printf("my_handler: could not open %s\n", fname);
+            }
+        } else {
+            stop_manual_log = 1;
+        }
+    }
+
     if ((MotorCmd)msg->cmd_id == CMD_DYNO_TEST) {
         new_dyno_test = fopen("dyno_test.csv", "w");
         if (!new_dyno_test) {
@@ -146,8 +179,20 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
             dyno.kp         = msg->kp;
             dyno.kd         = msg->kd;
             break;
+        case CMD_LOG_TOGGLE:
+            if (new_manual_log)
+                dyno.log_active = 1;
+            else if (stop_manual_log)
+                dyno.log_active = 0;
+            break;
         default:
             break;
     }
     pthread_mutex_unlock(&dyno_mutex);
+
+    /* Post-lock: close the manual log file if stopping */
+    if (stop_manual_log) {
+        log_close_manual_file();
+        printf("Manual logging stopped\n");
+    }
 }

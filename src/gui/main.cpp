@@ -327,6 +327,21 @@ void FOC_ControlPanel(bool &paused)
         lcm2.publish("MOTOR", &motor_data);
     }
 
+    // ---- Manual data logging toggle ----
+    static bool log_active = false;
+    if (log_active)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.18f, 0.18f, 1.0f));
+    if (ImGui::Button(log_active ? "Stop Logging" : "Start Logging")) {
+        log_active = !log_active;
+        motor_data.cmd_id = CMD_LOG_TOGGLE;
+        lcm2.publish("MOTOR", &motor_data);
+        motor_data.cmd_id = CMD_NONE;
+    }
+    if (log_active)
+        ImGui::PopStyleColor();
+    ImGui::SameLine();
+    ImGui::Text(log_active ? "Logging ON" : "Logging OFF");
+
     // ---- Sliders ----
     ImGui::SliderFloat("Angular Position (rad)",    &q_,       -ONE_REV * GR,     ONE_REV * GR);
     ImGui::SliderFloat("Angular Velocity (rad/sec)",&dq_,      -SPEED_MAX * 0.1f, SPEED_MAX * 0.1f);

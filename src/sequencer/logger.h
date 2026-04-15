@@ -4,9 +4,10 @@
 #include <stdio.h>
 #include <pthread.h>
 
-#define LOG_RING_SIZE  512   /* at 50 Hz, holds ~10 s of data   */
-#define LOG_TYPE_FOC   0     /* entry goes to foc_open_loop.csv */
-#define LOG_TYPE_DYNO  1     /* entry goes to dyno_test.csv     */
+#define LOG_RING_SIZE   512  /* at 50 Hz, holds ~10 s of data        */
+#define LOG_TYPE_FOC    0    /* entry goes to foc_open_loop.csv      */
+#define LOG_TYPE_DYNO   1    /* entry goes to dyno_test.csv          */
+#define LOG_TYPE_MANUAL 2    /* entry goes to manual log_TIMESTAMP.csv */
 
 typedef struct {
     double time_s;
@@ -35,6 +36,18 @@ void log_init(FILE *foc_fp, FILE *dyno_fp);
  * Not called from the RT thread.
  */
 void log_set_dyno_file(FILE *dyno_fp);
+
+/*
+ * Set the manual log file handle (call when CMD_LOG_TOGGLE starts logging).
+ * Not called from the RT thread.
+ */
+void log_set_manual_file(FILE *manual_fp);
+
+/*
+ * Flush and close the manual log file (call when CMD_LOG_TOGGLE stops logging).
+ * Not called from the RT thread.
+ */
+void log_close_manual_file(void);
 
 /*
  * Push one entry to the ring buffer — non-blocking, never touches a file.
