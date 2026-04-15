@@ -1,0 +1,18 @@
+# Build outputs
+build/
+*.o
+*.a
+*.so
+seqgen
+dyno_gui
+
+# Data / logs
+*.csv
+*.log
+*.txt
+
+# ImGui layout cache
+imgui.ini
+
+# OS
+.DS_Store
