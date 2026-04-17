@@ -6,6 +6,7 @@
 
 #include "lcm_interface.h"
 #include "logger.h"
+#include "motor_sim.h"
 
 /* Directory where all run-specific CSV files are created.
  * Set by lcm_interface_set_data_dir() before the listener thread starts. */
@@ -47,6 +48,9 @@ void dyno_init(void)
         .state             = 0,
         .led_flag          = 0,
         .log_active        = 0,
+        .sim_mode          = 0,
+        .cal_phase         = 0,
+        .cal_tick          = 0,
         .pos_cmd           = 0.0,
         .vel_cmd           = 0.0,
         .vq_cmd            = 0.0,
@@ -148,6 +152,21 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
         }
     }
 
+    if ((MotorCmd)msg->cmd_id == CMD_CAL_MOTOR) {
+        char cal_path[576];
+        make_path(cal_path, sizeof(cal_path), "calibration.csv");
+        FILE *new_cal = fopen(cal_path, "w");
+        if (!new_cal) {
+            printf("my_handler: could not open %s\n", cal_path);
+            return;
+        }
+        fprintf(new_cal,
+                "Time (s),CMD Input,Voltage MSR(V),Current (A),"
+                "Torque (Nm),Speed (rad/s),Pos (rad),"
+                "Elec Power (W),Mech Power (W),Phase\n");
+        log_set_cal_file(new_cal);
+    }
+
     if ((MotorCmd)msg->cmd_id == CMD_DYNO_TEST) {
         char dyno_path[576];
         make_path(dyno_path, sizeof(dyno_path), "dyno_test.csv");
@@ -211,6 +230,17 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
                 dyno.log_active = 1;
             else if (stop_manual_log)
                 dyno.log_active = 0;
+            break;
+        case CMD_SIM_TOGGLE:
+            dyno.sim_mode = !dyno.sim_mode;
+            if (dyno.sim_mode)
+                motor_sim_init(); /* reset virtual motor state when entering sim */
+            printf("Sim mode: %s\n", dyno.sim_mode ? "VIRTUAL" : "HARDWARE");
+            break;
+        case CMD_CAL_MOTOR:
+            dyno.state     = CMD_CAL_MOTOR;
+            dyno.cal_phase = 0;
+            dyno.cal_tick  = 0;
             break;
         default:
             break;

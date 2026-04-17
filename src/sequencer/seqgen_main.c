@@ -16,6 +16,7 @@
 #include "mcc_driver.h"
 #include "logger.h"
 #include "lcm_interface.h"
+#include "motor_sim.h"
 #include "dyno.h"
 
 int main(void)
@@ -48,6 +49,7 @@ int main(void)
 
     /* ---- Init shared dyno state ---- */
     dyno_init();
+    motor_sim_init();
     printf("h = %f\n",            dyno.h);
     printf("ramp_step = %d\n",    dyno.ramp_step);
     printf("dv = %f\n",           dyno.dv);

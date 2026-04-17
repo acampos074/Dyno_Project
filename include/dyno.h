@@ -51,7 +51,9 @@ typedef enum {
     CMD_TOGGLE_LED   = 7,
     CMD_CURRENT      = 8,
     CMD_TORQUE       = 9,
-    CMD_LOG_TOGGLE   = 10   /* start / stop manual CSV logging */
+    CMD_LOG_TOGGLE   = 10,  /* start / stop manual CSV logging  */
+    CMD_SIM_TOGGLE   = 11,  /* toggle virtual / hardware mode   */
+    CMD_CAL_MOTOR    = 12   /* start motor parameter ID routine */
 } MotorCmd;
 
 // ========== DYNO STRUCTURE ========
@@ -78,6 +80,9 @@ typedef struct {
     float mech_power;
     float efficiency;
     int log_active;
+    int sim_mode;           /* 1 = virtual (RK4), 0 = hardware (CAN) */
+    int cal_phase;          /* active calibration phase (0-4), 5 = done */
+    int cal_tick;           /* tick counter within the current phase    */
     int total_test_counter;
     double Fs;
     double h;
@@ -93,5 +98,27 @@ typedef struct {
     int N;
     int N_ramp_down;
 } dyno_t;
+
+// ========= MOTOR CALIBRATION PARAMETERS =========
+// Stimulus levels used by the CMD_CAL_MOTOR state machine.
+#define CAL_VQ_DC       1.0f     /* DC voltage for resistance test      (V)    */
+#define CAL_VQ_AC       1.0f     /* AC amplitude for inductance test    (V)    */
+#define CAL_FREQ        20.0f    /* sinusoidal excitation frequency     (Hz)   */
+#define CAL_IQ_MAX      2.0f     /* max current in Kt sweep             (A)    */
+#define CAL_J_IQ        2.0f     /* step current for inertia test       (A)    */
+#define CAL_B_IQ        0.1f     /* step current for damping B test     (A)    */
+#define CAL_VEL_MAX     30.0f    /* max velocity in damping sweep       (rad/s)*/
+#define CAL_VEL_KP      0.5f     /* velocity PD kp used during cal      (V·s/r)*/
+#define CAL_VEL_KD      0.05f    /* velocity PD kd used during cal             */
+
+// ========= VIRTUAL MOTOR SIMULATION PARAMETERS =========
+// Default values — tune after running CMD_CAL_MOTOR to match hardware.
+#define SIM_R    0.362f        /* winding resistance      (Ω)        */
+#define SIM_L    567.0e-6f       /* phase inductance        (H)        */
+#define SIM_Kt   KT          /* torque constant         (Nm/A)     */
+#define SIM_Ke   KT          /* back-EMF constant       (V·s/rad)  */
+#define SIM_B    3.5e-5f       /* viscous damping         (Nm·s/rad) */
+#define SIM_J    1e-4f       /* rotor inertia           (kg·m²)    */
+#define SIM_H    (1.0f/50.0f)/* integration timestep    (s)        */
 
 #endif /* DYNO_H */

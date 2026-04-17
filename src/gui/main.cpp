@@ -327,6 +327,34 @@ void FOC_ControlPanel(bool &paused)
         lcm2.publish("MOTOR", &motor_data);
     }
 
+    // ---- Virtual mode toggle (sim vs hardware) ----
+    static bool sim_active = false;
+    bool sim_was_active = sim_active;
+    if (sim_was_active)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.60f, 0.20f, 1.0f));
+    if (ImGui::Button(sim_active ? "Virtual Mode ON" : "Virtual Mode OFF")) {
+        sim_active = !sim_active;
+        motor_data.cmd_id = CMD_SIM_TOGGLE;
+        lcm2.publish("MOTOR", &motor_data);
+        motor_data.cmd_id = CMD_NONE;
+    }
+    if (sim_was_active)
+        ImGui::PopStyleColor();
+    ImGui::SameLine();
+    ImGui::Text(sim_active ? "[RK4 simulation]" : "[Hardware / CAN]");
+
+    // ---- Calibrate Motor (motor parameter ID routine) ----
+    static int cal_motor_clicked = 0;
+    if (ImGui::Button("Calibrate Motor"))
+        cal_motor_clicked++;
+    if (cal_motor_clicked & 1) {
+        std::cout << "Calibrate Motor\n";
+        motor_data.cmd_id = CMD_CAL_MOTOR;
+        lcm2.publish("MOTOR", &motor_data);
+        motor_data.cmd_id = CMD_NONE;
+        cal_motor_clicked = 0;
+    }
+
     // ---- Manual data logging toggle ----
     static bool log_active = false;
     bool log_was_active = log_active;  // capture before button can toggle it

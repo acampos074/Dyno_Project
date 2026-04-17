@@ -57,6 +57,7 @@ SEQ_SRC    = src/sequencer/seqgen_main.c \
              src/sequencer/mcc_driver.c \
              src/sequencer/logger.c \
              src/sequencer/encoding.c \
+             src/sequencer/motor_sim.c \
              $(LCM_DIR)/FOC_motor_t.c \
              $(MCC_DIR)/usb-1608FS.c \
              $(MCC_DIR)/pmd.c \

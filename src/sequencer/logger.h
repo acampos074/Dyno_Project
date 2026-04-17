@@ -5,9 +5,10 @@
 #include <pthread.h>
 
 #define LOG_RING_SIZE   512  /* at 50 Hz, holds ~10 s of data        */
-#define LOG_TYPE_FOC    0    /* entry goes to foc_open_loop.csv      */
-#define LOG_TYPE_DYNO   1    /* entry goes to dyno_test.csv          */
+#define LOG_TYPE_FOC    0    /* entry goes to foc_open_loop.csv        */
+#define LOG_TYPE_DYNO   1    /* entry goes to dyno_test.csv            */
 #define LOG_TYPE_MANUAL 2    /* entry goes to manual log_TIMESTAMP.csv */
+#define LOG_TYPE_CAL    3    /* entry goes to calibration.csv          */
 
 typedef struct {
     double time_s;
@@ -64,6 +65,10 @@ void *logger_thread(void *arg);
  * wait a brief period, then close and NULL the dyno_test file handle.
  */
 void log_flush_dyno(void);
+
+/* Set / flush-and-close the calibration log file. */
+void log_set_cal_file(FILE *cal_fp);
+void log_flush_cal(void);
 
 /* Signal logger_thread to flush remaining entries and exit, then join it. */
 void log_shutdown_wait(pthread_t th);
