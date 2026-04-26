@@ -14,6 +14,13 @@ data/
 *.ods
 .~lock.*
 
+# Python virtual environments and cache
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
 # ImGui layout cache
 imgui.ini
 

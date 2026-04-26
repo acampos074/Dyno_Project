@@ -70,6 +70,10 @@ void log_flush_dyno(void);
 void log_set_cal_file(FILE *cal_fp);
 void log_flush_cal(void);
 
+/* Called by Service_1 at end of an automated test to drain the ring,
+ * wait briefly, then close the manual log file. */
+void log_flush_manual(void);
+
 /* Signal logger_thread to flush remaining entries and exit, then join it. */
 void log_shutdown_wait(pthread_t th);
 

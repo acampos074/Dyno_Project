@@ -51,9 +51,10 @@ typedef enum {
     CMD_TOGGLE_LED   = 7,
     CMD_CURRENT      = 8,
     CMD_TORQUE       = 9,
-    CMD_LOG_TOGGLE   = 10,  /* start / stop manual CSV logging  */
-    CMD_SIM_TOGGLE   = 11,  /* toggle virtual / hardware mode   */
-    CMD_CAL_MOTOR    = 12   /* start motor parameter ID routine */
+    CMD_LOG_TOGGLE        = 10,  /* start / stop manual CSV logging  */
+    CMD_SIM_TOGGLE        = 11,  /* toggle virtual / hardware mode   */
+    CMD_CAL_MOTOR         = 12,  /* start motor parameter ID routine */
+    CMD_COULOMB_FRICTION  = 13   /* coulomb friction staircase sweep */
 } MotorCmd;
 
 // ========== DYNO STRUCTURE ========
@@ -83,6 +84,7 @@ typedef struct {
     int sim_mode;           /* 1 = virtual (RK4), 0 = hardware (CAN) */
     int cal_phase;          /* active calibration phase (0-4), 5 = done */
     int cal_tick;           /* tick counter within the current phase    */
+    int cf_tick;            /* tick counter for coulomb friction sweep  */
     int total_test_counter;
     double Fs;
     double h;
@@ -98,6 +100,19 @@ typedef struct {
     int N;
     int N_ramp_down;
 } dyno_t;
+
+// ========= COULOMB FRICTION SWEEP PARAMETERS =========
+#define CF_VEL_MAX     30.0f   /* peak velocity                  (rad/s) */
+#define CF_VEL_STEP     2.0f   /* velocity increment per step    (rad/s) */
+#define CF_KP           0.1f   /* velocity loop proportional gain        */
+#define CF_KD           0.01f  /* velocity loop derivative gain          */
+#define CF_N_UP_STEPS  31      /* steps from -VEL_MAX to +VEL_MAX        */
+#define CF_N_DN_STEPS  30      /* steps from +VEL_MAX-STEP to -VEL_MAX   */
+#define CF_N_STEPS     (CF_N_UP_STEPS + CF_N_DN_STEPS)
+#define CF_STEP_TICKS  200     /* ticks per step  (0.5 s @ 400 Hz)       */
+#define CF_STOP_TICKS  400     /* zero-vel coast  (1.0 s @ 400 Hz)       */
+#define CF_TEST_TICKS  (CF_N_STEPS * CF_STEP_TICKS)
+#define CF_TOTAL_TICKS (CF_TEST_TICKS + CF_STOP_TICKS)
 
 // ========= MOTOR CALIBRATION PARAMETERS =========
 // Stimulus levels used by the CMD_CAL_MOTOR state machine.
@@ -119,6 +134,6 @@ typedef struct {
 #define SIM_Ke   KT          /* back-EMF constant       (V·s/rad)  */
 #define SIM_B    3.5e-5f       /* viscous damping         (Nm·s/rad) */
 #define SIM_J    1e-4f       /* rotor inertia           (kg·m²)    */
-#define SIM_H    (1.0f/50.0f)/* integration timestep    (s)        */
+#define SIM_H    (1.0f/400.0f)  /* integration timestep    (s)        */
 
 #endif /* DYNO_H */

@@ -65,13 +65,6 @@ int main(void)
     if (!fp) { printf("Cannot open %s\n", path_buf); return 1; }
     fprintf(fp, "Column1,Column2\n");
 
-    snprintf(path_buf, sizeof(path_buf), "%s/foc_open_loop.csv", run_dir);
-    FILE *foc_open_loop = fopen(path_buf, "w");
-    if (!foc_open_loop) { printf("Cannot open %s\n", path_buf); return 1; }
-    fprintf(foc_open_loop,
-            "Time (s),Voltage CMD(V),Voltage MSR(V),Current (A),"
-            "Torque (Nm),Speed (rad/s),Pos (rad),"
-            "Elec Power (W),Mech Power (W),Efficiency\n");
 
     /* ---- Module init ---- */
     if (mcc_init() < 0) return 1;
@@ -79,7 +72,7 @@ int main(void)
     if (lcm_interface_init() < 0) return 1;
     if (can_open() < 0) return 1;
 
-    log_init(foc_open_loop, NULL);
+    log_init(NULL, NULL);
     sequencer_init();
 
     /* ---- CAN handshake ---- */
@@ -171,9 +164,9 @@ int main(void)
 
     sleep(1);
 
-    /* ---- Start sequencer timer at 100 Hz, 2000 ticks (20 s) ---- */
+    /* ---- Start sequencer timer at 1000 Hz, 20000 ticks (20 s) ---- */
     printf("Start sequencer\n");
-    sequencer_start(2000);
+    sequencer_start(20000);
 
     /* ---- Wait for Service_1 to finish ---- */
     for (i = 0; i < NUM_THREADS; i++) {
@@ -188,7 +181,6 @@ int main(void)
     log_shutdown_wait(th_logger);
 
     fclose(fp);
-    fclose(foc_open_loop);
     can_close();
     mcc_close();
     pthread_join(th_listener, NULL);

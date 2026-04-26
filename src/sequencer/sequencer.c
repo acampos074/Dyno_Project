@@ -52,9 +52,9 @@ void sequencer_start(unsigned long long periods)
     signal(SIGALRM, (void(*)()) Sequencer);
 
     itime.it_interval.tv_sec  = 0;
-    itime.it_interval.tv_nsec = 10000000; /* 10 ms → 100 Hz sequencer */
+    itime.it_interval.tv_nsec = 2500000; /* 2.5 ms → 400 Hz sequencer */
     itime.it_value.tv_sec     = 0;
-    itime.it_value.tv_nsec    = 10000000;
+    itime.it_value.tv_nsec    = 2500000;
     timer_settime(timer_1, flags, &itime, &last_itime);
 }
 
@@ -64,12 +64,11 @@ void Sequencer(int id)
     int flags = 0;
 
     seqCnt++;
-    if (seqCnt >= 1000)
+    if (seqCnt >= 400)
         seqCnt = 1;
 
-    /* Release Service_1 at half the sequencer rate → 50 Hz */
-    if ((seqCnt % 2) == 0)
-        sem_post(&semS1);
+    /* Release Service_1 every tick → 1000 Hz */
+    sem_post(&semS1);
 
     if (abortTest || (seqCnt >= sequencePeriods)) {
         itime.it_interval.tv_sec  = 0;
@@ -84,7 +83,7 @@ void Sequencer(int id)
     }
 }
 
-/* ---- Service_1 (50 Hz RT thread) ---- */
+/* ---- Service_1 (1000 Hz RT thread) ---- */
 void *Service_1(void *threadp)
 {
     struct timespec current_time_val;
@@ -149,24 +148,6 @@ void *Service_1(void *threadp)
                                        ? mech_power / elec_power : 0.0f;
 
                     FOC_motor_t_publish(lcm, LCM_CHAN_GUI, &motor_data);
-
-                    if (cmd.state == CMD_VOLTAGE_FOC) {
-                        clock_gettime(MY_CLOCK_TYPE, &current_time_val);
-                        current_realtime = realtime(&current_time_val);
-                        log_push(&(log_entry_t){
-                            .log_type    = LOG_TYPE_FOC,
-                            .time_s      = current_realtime - start_realtime,
-                            .vq_cmd      = cmd.vq_cmd,
-                            .vq_msr      = applied_vq,
-                            .iq          = sim_state.iq,
-                            .torque_dyno = torque_sim,
-                            .velocity    = sim_state.omega,
-                            .position    = sim_state.theta,
-                            .elec_power  = elec_power,
-                            .mech_power  = mech_power,
-                            .efficiency  = efficiency
-                        });
-                    }
 
                     pthread_mutex_lock(&dyno_mutex);
                     dyno.torque_dyno = torque_sim;
@@ -258,7 +239,7 @@ void *Service_1(void *threadp)
                             sinf(2.0f * (float)M_PI * CAL_FREQ * tick * SIM_H);
                         break;
                     case 2:
-                        step = (tick / 50 < 4) ? tick / 50 : 3;
+                        step = (tick / 1000 < 4) ? tick / 1000 : 3;
                         cal_cmd    = CMD_CURRENT;
                         cal_iq_now = iq_levels[step];
                         break;
@@ -362,10 +343,10 @@ void *Service_1(void *threadp)
 
                 switch (phase) {
 
-                    /* Phase 0 — Resistance (40 ticks) */
+                    /* Phase 0 — Resistance (800 ticks = 800 ms) */
                     case 0:
-                        if (tick >= 10) { sum_iq += meas_iq; sum_n++; }
-                        if (tick == 39) {
+                        if (tick >= 200) { sum_iq += meas_iq; sum_n++; }
+                        if (tick == 799) {
                             R_est = (sum_n > 0)
                                     ? (float)(CAL_VQ_DC / (sum_iq / sum_n)) : 0;
                             printf("[CAL] Phase 0 — R = %.4f Ohm\n", R_est);
@@ -374,14 +355,14 @@ void *Service_1(void *threadp)
                         }
                         break;
 
-                    /* Phase 1 — Inductance (60 ticks) */
+                    /* Phase 1 — Inductance (1200 ticks = 1.2 s) */
                     case 1:
-                        if (tick >= 30) {
+                        if (tick >= 600) {
                             sum_vq2 += cal_vq_now * cal_vq_now;
                             sum_iq2 += meas_iq    * meas_iq;
                             sum_n++;
                         }
-                        if (tick == 59) {
+                        if (tick == 1199) {
                             float Vq_rms = sqrtf((float)(sum_vq2 / sum_n));
                             float Iq_rms = sqrtf((float)(sum_iq2 / sum_n));
                             float Z      = (Iq_rms > 1e-6f) ? Vq_rms / Iq_rms : 0;
@@ -396,18 +377,18 @@ void *Service_1(void *threadp)
                         }
                         break;
 
-                    /* Phase 2 — Kt (200 ticks: 4 steps × 50) */
+                    /* Phase 2 — Kt (4000 ticks: 4 steps × 1000) */
                     case 2:
-                        step = (tick / 50 < 4) ? tick / 50 : 3;
-                        if (tick % 50 >= 30) {    /* last 20 ticks of each step */
+                        step = (tick / 1000 < 4) ? tick / 1000 : 3;
+                        if (tick % 1000 >= 800) {  /* last 200 ticks of each step */
                             kt_iq[step]  += meas_iq;
                             kt_tau[step] += meas_torque;
                         }
-                        if (tick == 199) {
+                        if (tick == 3999) {
                             double num = 0, den = 0;
                             for (int i = 0; i < 4; i++) {
-                                double ia = kt_iq[i]  / 20.0;
-                                double ta = kt_tau[i] / 20.0;
+                                double ia = kt_iq[i]  / 200.0;
+                                double ta = kt_tau[i] / 200.0;
                                 num += ia * ta;
                                 den += ia * ia;
                             }
@@ -418,26 +399,21 @@ void *Service_1(void *threadp)
                         }
                         break;
 
-                    /* Phase 3 — Damping B (200 ticks, 2-point exponential fit).
+                    /* Phase 3 — Damping B (4000 ticks = 4 s, 2-point exponential fit).
                      *
-                     * CMD_CURRENT (rk4_mech) is used instead of CMD_VELOCITY.
-                     * The firmware velocity gains (kp=0.5) are designed for the
-                     * motor's own fast inner loop (~5 kHz); they are unstable at
-                     * the 50 Hz outer-loop rate used here.  rk4_mech bypasses
-                     * the electrical equation entirely and is unconditionally
-                     * stable at any step size.
+                     * CMD_CURRENT (rk4_mech) bypasses the electrical equation and is
+                     * unconditionally stable at any step size.
                      *
                      * Physics: ω(t) = ω_ss·(1 − e^(−t/τm))
                      *   ω_ss = Kt·Iq / B ,  τm = J / B
-                     * Sampling at T/2 (tick 100) and T (tick 199):
+                     * Sampling at T/2 (tick 2000 = 2 s) and T (tick 3999 = 4 s):
                      *   ω_ss = ω_a² / (2·ω_a − ω_b)
                      *   B    = Kt·Iq / ω_ss
-                     * When ω_a ≈ ω_b (motor already at SS on hardware with
-                     * larger B), falls back to B = Kt·Iq / ω_a directly.
+                     * When ω_a ≈ ω_b (near SS), falls back to B = Kt·Iq / ω_a.
                      */
                     case 3:
-                        if (tick == 100) omega0 = meas_omega;  /* reuse omega0 */
-                        if (tick == 199) {
+                        if (tick == 2000) omega0 = meas_omega;  /* reuse omega0 */
+                        if (tick == 3999) {
                             float wa    = omega0;
                             float wb    = meas_omega;
                             float x_val = (wa > 1e-4f) ? (wb / wa - 1.0f) : -1.0f;
@@ -460,12 +436,12 @@ void *Service_1(void *threadp)
                         }
                         break;
 
-                    /* Phase 4 — Inertia J (40 ticks) */
+                    /* Phase 4 — Inertia J (800 ticks = 800 ms) */
                     case 4:
-                        if (tick == 4)  omega0 = meas_omega;
-                        if (tick == 34) {
+                        if (tick == 80)  omega0 = meas_omega;
+                        if (tick == 680) {
                             float omega1    = meas_omega;
-                            float alpha     = (omega1 - omega0) / (30.0f * SIM_H);
+                            float alpha     = (omega1 - omega0) / (600.0f * SIM_H);
                             float omega_avg = (omega0 + omega1) * 0.5f;
                             float J_est     = (fabsf(alpha) > 0.1f)
                                 ? (Kt_est * CAL_J_IQ - B_est * omega_avg) / alpha
@@ -508,6 +484,101 @@ void *Service_1(void *threadp)
                 break;
             }
 
+            case CMD_COULOMB_FRICTION: {
+                int   tick      = cmd.cf_tick;
+                int   test_done = (tick >= CF_TOTAL_TICKS - 1);
+                float vel_target;
+
+                if (tick < CF_TEST_TICKS) {
+                    int step = tick / CF_STEP_TICKS;
+                    if (step < CF_N_UP_STEPS)
+                        vel_target = -CF_VEL_MAX + step * CF_VEL_STEP;
+                    else
+                        vel_target = CF_VEL_MAX - CF_VEL_STEP
+                                     - (step - CF_N_UP_STEPS) * CF_VEL_STEP;
+                } else {
+                    vel_target = 0.0f;
+                }
+
+                float meas_omega = 0, meas_theta = 0, meas_iq = 0;
+                float meas_torque = 0, applied_vq = 0;
+
+                if (cmd.sim_mode) {
+                    motor_sim_input_t in = {
+                        .vel_cmd = vel_target,
+                        .kp      = CF_KP,
+                        .kd      = CF_KD
+                    };
+                    applied_vq  = motor_sim_step(CMD_VELOCITY, &in, SIM_H);
+                    meas_iq     = sim_state.iq;
+                    meas_omega  = sim_state.omega;
+                    meas_theta  = sim_state.theta;
+                    meas_torque = SIM_Kt * sim_state.iq;
+                    motor_data.iq       = meas_iq;
+                    motor_data.velocity = meas_omega;
+                    motor_data.position = meas_theta;
+                    motor_data.vq       = applied_vq;
+                    motor_data.cmd_id   = CMD_VELOCITY;
+                    FOC_motor_t_publish(lcm, LCM_CHAN_GUI, &motor_data);
+                } else {
+                    int vel_int = float_to_uint16(vel_target, -SPEED_MAX, SPEED_MAX);
+                    int kp_int  = float_to_uint8(CF_KP, 0.0f, KP_MAX / GAIN);
+                    int kd_int  = float_to_uint8(CF_KD, 0.0f, 0.1f / GAIN);
+                    memset(data, 0, sizeof(data));
+                    data[1] = CMD_VELOCITY;
+                    data[2] = vel_int >> 8;
+                    data[3] = vel_int & 0xFF;
+                    data[4] = kp_int;
+                    data[5] = kd_int;
+                    sendCANFrame(CAN_ID, data, 8);
+                    motor_data.cmd_id = CMD_VELOCITY;
+                    if (receiveCANFrame(&motor_data) == 0) {
+                        meas_iq     = motor_data.iq;
+                        meas_omega  = motor_data.velocity;
+                        meas_theta  = motor_data.position;
+                        applied_vq  = motor_data.vq;
+                        meas_torque = mcc_read_torque();
+                    }
+                    FOC_motor_t_publish(lcm, LCM_CHAN_GUI, &motor_data);
+                }
+
+                /* Inline log push — avoids a second mcc_read_torque() call in
+                 * the generic manual log block below. */
+                if (cmd.log_active) {
+                    clock_gettime(MY_CLOCK_TYPE, &current_time_val);
+                    current_realtime = realtime(&current_time_val);
+                    log_push(&(log_entry_t){
+                        .log_type    = LOG_TYPE_MANUAL,
+                        .time_s      = current_realtime - start_realtime,
+                        .vq_cmd      = vel_target,
+                        .vq_msr      = applied_vq,
+                        .iq          = meas_iq,
+                        .torque_dyno = meas_torque,
+                        .velocity    = meas_omega,
+                        .position    = meas_theta,
+                        .elec_power  = meas_iq * applied_vq,
+                        .mech_power  = meas_torque * meas_omega,
+                        .efficiency  = 0.0f
+                    });
+                }
+
+                pthread_mutex_lock(&dyno_mutex);
+                dyno.torque_dyno = meas_torque;
+                if (test_done) {
+                    dyno.log_active = 0;
+                    dyno.cf_tick    = 0;
+                    dyno.state      = CMD_OFF;
+                } else {
+                    dyno.cf_tick = tick + 1;
+                }
+                pthread_mutex_unlock(&dyno_mutex);
+
+                if (test_done)
+                    log_flush_manual();
+
+                break;
+            }
+
             case CMD_OFF:
                 memset(data, 0, sizeof(data));
                 data[1] = CMD_OFF;
@@ -536,21 +607,6 @@ void *Service_1(void *threadp)
                 float elec_power  = motor_data.iq * cmd.vq_cmd;
                 float mech_power  = torque_dyno * motor_data.velocity;
                 float efficiency  = (elec_power != 0.0f) ? mech_power / elec_power : 0.0f;
-                clock_gettime(MY_CLOCK_TYPE, &current_time_val);
-                current_realtime = realtime(&current_time_val);
-                log_push(&(log_entry_t){
-                    .log_type    = LOG_TYPE_FOC,
-                    .time_s      = current_realtime - start_realtime,
-                    .vq_cmd      = cmd.vq_cmd,
-                    .vq_msr      = motor_data.vq,
-                    .iq          = motor_data.iq,
-                    .torque_dyno = torque_dyno,
-                    .velocity    = motor_data.velocity,
-                    .position    = motor_data.position,
-                    .elec_power  = elec_power,
-                    .mech_power  = mech_power,
-                    .efficiency  = efficiency
-                });
                 pthread_mutex_lock(&dyno_mutex);
                 dyno.torque_dyno = torque_dyno;
                 dyno.elec_power  = elec_power;
@@ -712,10 +768,11 @@ void *Service_1(void *threadp)
                 break;
         }
 
-        /* Manual logging — runs every tick when active, regardless of control mode.
+        /* Manual logging — runs every tick when active, except CMD_COULOMB_FRICTION
+         * which does its own inline push to avoid a redundant mcc_read_torque() call.
          * Reads MCC torque and computes derived quantities independently of the
          * per-mode reads above so all control modes are covered. */
-        if (cmd.log_active) {
+        if (cmd.log_active && cmd.state != CMD_COULOMB_FRICTION) {
             float torque_dyno = cmd.sim_mode
                                 ? SIM_Kt * sim_state.iq
                                 : mcc_read_torque();

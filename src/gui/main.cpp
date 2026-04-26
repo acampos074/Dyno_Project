@@ -355,6 +355,18 @@ void FOC_ControlPanel(bool &paused)
         cal_motor_clicked = 0;
     }
 
+    // ---- Coulomb Friction Test ----
+    static int cf_clicked = 0;
+    if (ImGui::Button("Coulomb Friction"))
+        cf_clicked++;
+    if (cf_clicked & 1) {
+        std::cout << "Coulomb Friction Test\n";
+        motor_data.cmd_id = CMD_COULOMB_FRICTION;
+        lcm2.publish("MOTOR", &motor_data);
+        motor_data.cmd_id = CMD_NONE;
+        cf_clicked = 0;
+    }
+
     // ---- Manual data logging toggle ----
     static bool log_active = false;
     bool log_was_active = log_active;  // capture before button can toggle it

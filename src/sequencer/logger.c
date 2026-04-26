@@ -136,6 +136,14 @@ void *logger_thread(void *arg)
     return NULL;
 }
 
+void log_flush_manual(void)
+{
+    sem_post(&log_sem);
+    struct timespec wait = {0, 10000000}; /* 10 ms */
+    nanosleep(&wait, NULL);
+    log_close_manual_file();
+}
+
 void log_flush_dyno(void)
 {
     /* Poke the logger to drain remaining entries, then close the file.

@@ -51,6 +51,7 @@ void dyno_init(void)
         .sim_mode          = 0,
         .cal_phase         = 0,
         .cal_tick          = 0,
+        .cf_tick           = 0,
         .pos_cmd           = 0.0,
         .vel_cmd           = 0.0,
         .vq_cmd            = 0.0,
@@ -72,7 +73,7 @@ void dyno_init(void)
         .efficiency        = 0.0,
         .total_test_counter= 1,
         .cycle_counter     = 1,
-        .Fs                = 50.0,
+        .Fs                = 400.0,
         .Vmax              = 2,
         .num_cycles        = 10,
         .ramp_time         = 1.0,
@@ -149,6 +150,26 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
             }
         } else {
             stop_manual_log = 1;
+        }
+    }
+
+    if ((MotorCmd)msg->cmd_id == CMD_COULOMB_FRICTION) {
+        time_t now = time(NULL);
+        struct tm *tm_info = localtime(&now);
+        char basename[64];
+        strftime(basename, sizeof(basename), "coulomb_%Y%m%d_%H%M%S.csv", tm_info);
+        char path[576];
+        make_path(path, sizeof(path), basename);
+        new_manual_log = fopen(path, "w");
+        if (new_manual_log) {
+            fprintf(new_manual_log,
+                    "Time (s),Vel CMD(rad/s),Voltage MSR(V),Current (A),"
+                    "Torque (Nm),Speed (rad/s),Pos (rad),"
+                    "Elec Power (W),Mech Power (W),Efficiency\n");
+            log_set_manual_file(new_manual_log);
+            printf("Coulomb friction logging started: %s\n", path);
+        } else {
+            printf("my_handler: could not open %s\n", path);
         }
     }
 
@@ -241,6 +262,11 @@ static void my_handler(const lcm_recv_buf_t *rbuf, const char *channel,
             dyno.state     = CMD_CAL_MOTOR;
             dyno.cal_phase = 0;
             dyno.cal_tick  = 0;
+            break;
+        case CMD_COULOMB_FRICTION:
+            dyno.state      = CMD_COULOMB_FRICTION;
+            dyno.log_active = (new_manual_log != NULL);
+            dyno.cf_tick    = 0;
             break;
         default:
             break;

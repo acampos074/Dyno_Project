@@ -16,7 +16,7 @@
 
 \title{FOC Equations}
 \author{Andres Campos Alvarado}
-\date{07/10/22}
+\date{04/19/26}
 
 \begin{document}
 
@@ -28,15 +28,13 @@
 \begin{equation}
     DC = 1-\frac{CCR}{ARR}
 \end{equation}
-Where $ARR:$ auto-reload register = 3102 for a 180MHz CPU clock and $CCR:$ capture/compare register. $CCR \in A$ where $A=\{x \in \mathbb{R} | 0\leq x \leq1\}$
+Where $ARR:$ auto-reload register = 3000 for a 180MHz CPU clock and $CCR:$ capture/compare register. $CCR \in A$ where $A=\{x \in \mathbb{R} | 0\leq x \leq1\}$
 
 \begin{equation}
-    f_{PWM} = \frac{f_{CLK}}{2(ARR+1)(PSC+1)}
+    f_{PWM} = \frac{f_{CLK}}{2(ARR)(PSC+1)}
 \end{equation}
-Where $f_{CLK} = 180MHz$, $AAR = 3600$, and $PSC = 0$.
-$PSC$ is a 16-bit prescaler. This will yield a sampling frequency of 25kHz. $AAR = 3102$ yields a sampling frequency of 29kHz. This was chosen based on time measurements of the algorithm. The commutation cycle takes 13$\mu s$. The ADC and HES sampling take 18.6$\mu s$. Therefore, the total time needed to run this algorithm once is 31.6$\mu s$, so the current sampling period of 34.5$\mu s$ has 9$\%$ of margin left.
-
-The ADC takes 4$\mu s$ and the HES takes 14.6$\mu s$. The SPI communication takes 8$\mu s$. The current HES sampling function implements a lookup table to linearize the sensor measurement. Studies can be performed to confirm if this is truly needed. Eliminating these computations can help further increase the sampling frequency. The time it takes to read and send CAN messages is approximately 142$\mu s$ ($\approx $7kHz).
+Where $f_{CLK} = 180MHz$, $AAR = 3000$, and $PSC = 0$.
+$PSC$ is a 16-bit prescaler. This will yield a sampling frequency of 30kHz. This was chosen based on time measurements of the algorithm. One cycle of the algorithm takes 17.4$\mu s$, where ADC and the HES takes 4.6$\mu s$, so the current sampling period of 33.3$\mu s$ has 50$\%$ of margin left. 
 
 \section{HES Equations}
 \subsection{Calibrated Electrical Angle}
@@ -188,7 +186,9 @@ where U is the controller effort, E is the error signal,
 \end{equation}
 Where $T_s = 1/40000$ is the sampling period [sec], $\omega_c = \pi/200$ is the cross-over frequency in rads/samples, $R_d = 0.362\Omega$, and $L_d = 567 \mu H$. $R_d$ and $L_d$ are the resistance and inductance of the d-axis circuit, respectively.\newline
 
-The designer chooses $w_c$ to adjust PI loop performance (i.e. the higher the cross-over frequency the faster the feedback response with the added risk of lower phase margin and going unstable).
+The gains corresponding to a sampling frequency of 30kHz are P = 0.27005 and I = 0.021057, for the proportional and integral term, respectively. The D-axis current target is set to zero in order to maximize the torque per amp, so the q-axis current target is the only input to the controller.
+
+A 1kHz PD impedance controller is wrapped around the current controller to implement a virtual spring and damper. The gains for the PD controller are P = 0.15 and D = 0.009, and these were determined experimentally by testing different values and inspecting the step response of the system.
 
 \vspace{5mm} %5mm vertical space
 
@@ -233,7 +233,7 @@ The motor resistance and inductance are needed in order to implement the PI curr
     \label{fig:/Images/RL_Step_Response_Id}
 \end{figure}
 
-The resistance was estimated using Ohm's law during the steady state part of the response ($v_d/i_d$ = 0.2V/0.553A = 0.362$\Omega$). Once we know the resistance, we use the transient part of the response to estimate the inductance. We find the time constant ($\tau$) by inspecting how much time it takes the current to reach 63.2$\%$ from it's steady state value which was 1.57ms. Then the inductance can be calculated using the following equation 
+The resistance was estimated using Ohm's law during the steady state part of the response ($v_d/i_d$ = 0.2V/0.553A = 0.362$\Omega$). Once we know the resistance, we use the transient part of the response to estimate the inductance of 567uH. We find the time constant ($\tau$) by inspecting how much time it takes the current to reach 63.2$\%$ from it's steady state value which was 1.57ms. Then the inductance can be calculated using the following equation 
 
 \begin{equation}
     \tau = \frac{L_d}{R}
@@ -243,7 +243,7 @@ Note that for PMSM the d-axis and q-axis inductance are quite similar, so for si
 
 \subsection{Rotor Inertia and Viscous Damping}
 
-The viscous damping ($b$ = 3.5E-5)was estimated by solving for the linear viscous term when running the motor at constant voltage (Vq) input and constant velocity by using the following expression:
+The viscous damping ($b$ = 8.4E-5 Nm.s/rad)was estimated by solving for the linear viscous term when running the motor at constant voltage (Vq) input and constant velocity by using the following expression:
 
 \begin{equation}
     J\ddot{\theta} + b\dot{\theta}= K_Ti = \frac{KV_Q-K_T^2\dot{\theta}}{R}
@@ -252,7 +252,33 @@ The viscous damping ($b$ = 3.5E-5)was estimated by solving for the linear viscou
     b = \frac{KV_Q-K_T^2\dot{\theta}}{\dot{\theta}R}
 \end{equation}
 
-For speed control, the Kp gain was determined experimentally and a value of 0.004 works well and can track up to 9 rad/sec. Below this, the motor stalls due to friction. For position control, a Kp gain of 0.004 (0.1/25) and Kd (0.01/25) gain of 0.0004 works well.
+The rotor inertia ($J$ = 4.0102e-07 kg·m²) was estimated by applying a step voltage to the q-axis and measuring the transient response of the velocity. The figure below illustrates the response and the fitted exponential model for comparison.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{spin_down_fit}
+    \caption{Step Response of Motor Velocity}
+    \label{fig:/Images/spin_down_fit}
+\end{figure}
+
+For position control, Kp gain was determined experimentally and a value of 0.15 works well with a Kd gain 0.009
+
+Now that the motor has been characterized, simulations were ran t generate the torque speed curve and efficienty map.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{torque_speed}
+    \caption{Torque-Speed Characteristic}
+    \label{fig:/Images/torque_speed}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{efficiency_map}
+    \caption{Efficiency Map}
+    \label{fig:/Images/efficiency_map}
+\end{figure}
+
 \begin{comment}
 \end{comment}
 \end{document}
