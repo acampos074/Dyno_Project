@@ -1,4 +1,7 @@
+import subprocess
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from collections import defaultdict
@@ -216,4 +219,5 @@ plt.tight_layout()
 out_path3 = os.path.join(script_dir, "coulomb_stribeck_fit.png")
 plt.savefig(out_path3, dpi=150)
 print(f"Saved: {out_path3}")
-plt.show()
+subprocess.Popen(['eog', out_path, out_path2, out_path3],
+                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
